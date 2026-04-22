@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S25U Admin Storage</title>
+    <style>
+        :root { --bg: #050505; --card: #121212; --primary: #007bff; --danger: #dc3545; --text: #e0e0e0; }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding: 20px; }
+        
+        /* Admin Header */
+        header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid #222; }
+        .status-dot { height: 10px; width: 10px; background: #28a745; border-radius: 50%; display: inline-block; margin-right: 5px; }
+
+        /* Controls */
+        .controls { margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn { padding: 12px 20px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; }
+        .btn-upload { background: var(--primary); color: white; }
+        .btn-clear { background: #333; color: white; }
+        input[type="file"] { display: none; }
+
+        /* File Grid */
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; margin-top: 20px; }
+        .file-card { background: var(--card); border: 1px solid #222; border-radius: 12px; padding: 15px; position: relative; animation: fadeIn 0.3s; }
+        .file-icon { font-size: 30px; margin-bottom: 10px; }
+        .file-name { font-size: 12px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 10px; }
+        
+        .admin-actions { display: flex; gap: 5px; }
+        .action-btn { flex: 1; padding: 6px; font-size: 10px; border-radius: 4px; border: 1px solid #333; background: #1a1a1a; color: white; cursor: pointer; }
+        .action-btn:hover { background: #252525; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <h2 style="margin:0;">CloudNode <span style="font-size: 12px; color: #666;">v1.0</span></h2>
+        <span class="status-dot"></span><small>Admin Authenticated (S25U)</small>
+    </div>
+</header>
+
+<div class="controls">
+    <label class="btn btn-upload">
+        UPLOAD FILE
+        <input type="file" id="fileInput" onchange="handleFile(this)">
+    </label>
+    <button class="btn btn-clear" onclick="clearStorage()">WIPE STORAGE</button>
+</div>
+
+<div id="fileList" class="file-grid">
+    </div>
+
+<script>
+    let storage = JSON.parse(localStorage.getItem('admin_files')) || [];
+
+    // Initialize list
+    window.onload = renderFiles;
+
+    function handleFile(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const fileData = {
+                id: Date.now(),
+                name: file.name,
+                type: file.type,
+                size: (file.size / 1024).toFixed(1) + ' KB',
+                content: e.target.result // Base64 string
+            };
+            
+            storage.push(fileData);
+            save();
+            renderFiles();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function renderFiles() {
+        const list = document.getElementById('fileList');
+        list.innerHTML = storage.length === 0 ? '<p style="color:#444">Storage Empty...</p>' : '';
+        
+        storage.forEach(file => {
+            const card = document.createElement('div');
+            card.className = 'file-card';
+            const icon = file.type.includes('image') ? '🖼️' : '📄';
+            
+            card.innerHTML = `
+                <div class="file-icon">${icon}</div>
+                <div class="file-name" title="${file.name}">${file.name}</div>
+                <div style="font-size:10px; color:#666; margin-bottom:10px;">${file.size}</div>
+                <div class="admin-actions">
+                    <button class="action-btn" onclick="downloadFile(${file.id})">DOWNLOAD</button>
+                    <button class="action-btn" style="color:#ff6b6b" onclick="deleteFile(${file.id})">DELETE</button>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    function downloadFile(id) {
+        const file = storage.find(f => f.id === id);
+        const link = document.createElement('a');
+        link.href = file.content;
+        link.download = file.name;
+        link.click();
+    }
+
+    function deleteFile(id) {
+        storage = storage.filter(f => f.id !== id);
+        save();
+        renderFiles();
+    }
+
+    function clearStorage() {
+        if(confirm("Wipe all admin storage?")) {
+            storage = [];
+            save();
+            renderFiles();
+        }
+    }
+
+    function save() {
+        localStorage.setItem('admin_files', JSON.stringify(storage));
+    }
+</script>
+
+</body>
+</html>
