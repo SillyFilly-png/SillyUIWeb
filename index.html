@@ -3,129 +3,128 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>S25U Admin Storage</title>
+    <title>CloudNode Admin</title>
     <style>
-        :root { --bg: #050505; --card: #121212; --primary: #007bff; --danger: #dc3545; --text: #e0e0e0; }
-        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding: 20px; }
+        :root { --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #c9d1d9; --blue: #58a6ff; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 15px; }
         
-        /* Admin Header */
-        header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid #222; }
-        .status-dot { height: 10px; width: 10px; background: #28a745; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; }
+        .admin-badge { font-size: 10px; background: #238636; color: white; padding: 2px 8px; border-radius: 10px; display: none; }
 
-        /* Controls */
-        .controls { margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; }
-        .btn { padding: 12px 20px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; }
-        .btn-upload { background: var(--primary); color: white; }
-        .btn-clear { background: #333; color: white; }
-        input[type="file"] { display: none; }
-
-        /* File Grid */
-        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; margin-top: 20px; }
-        .file-card { background: var(--card); border: 1px solid #222; border-radius: 12px; padding: 15px; position: relative; animation: fadeIn 0.3s; }
-        .file-icon { font-size: 30px; margin-bottom: 10px; }
-        .file-name { font-size: 12px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 10px; }
+        .file-list { margin-top: 20px; display: grid; gap: 10px; }
+        .file-item { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
         
-        .admin-actions { display: flex; gap: 5px; }
-        .action-btn { flex: 1; padding: 6px; font-size: 10px; border-radius: 4px; border: 1px solid #333; background: #1a1a1a; color: white; cursor: pointer; }
-        .action-btn:hover { background: #252525; }
+        .btn { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); background: #21262d; color: var(--blue); cursor: pointer; font-weight: 600; text-decoration: none; font-size: 13px; }
+        .btn-upload { background: #238636; color: white; border: none; }
+        .btn-del { color: #f85149; }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        #adminPanel { display: none; margin-top: 15px; padding: 15px; border: 1px solid var(--blue); border-radius: 8px; background: #0d1117; }
+        input[type="file"] { margin: 10px 0; color: #8b949e; }
     </style>
 </head>
 <body>
 
 <header>
     <div>
-        <h2 style="margin:0;">CloudNode <span style="font-size: 12px; color: #666;">v1.0</span></h2>
-        <span class="status-dot"></span><small>Admin Authenticated (S25U)</small>
+        <h2 style="margin:0;">CloudNode</h2>
+        <div id="badge" class="admin-badge">ADMIN ACTIVE</div>
     </div>
+    <button class="btn" id="loginBtn" onclick="adminLogin()">ADMIN LOGIN</button>
 </header>
 
-<div class="controls">
-    <label class="btn btn-upload">
-        UPLOAD FILE
-        <input type="file" id="fileInput" onchange="handleFile(this)">
-    </label>
-    <button class="btn btn-clear" onclick="clearStorage()">WIPE STORAGE</button>
+<div id="adminPanel">
+    <small>Logged in as Root. Select file to push to GitHub:</small><br>
+    <input type="file" id="filePicker">
+    <button class="btn btn-upload" onclick="uploadToGithub()">PUSH TO CLOUD</button>
 </div>
 
-<div id="fileList" class="file-grid">
-    </div>
+<div id="fileList" class="file-list">
+    <p style="text-align:center; color:#8b949e;">Fetching shared files...</p>
+</div>
 
 <script>
-    let storage = JSON.parse(localStorage.getItem('admin_files')) || [];
+    // --- CONFIGURATION ---
+    const GITHUB_USER = 'YOUR_GITHUB_USERNAME'; // REPLACE THIS
+    const GITHUB_REPO = 'YOUR_REPO_NAME';     // REPLACE THIS
+    const FILE_PATH = 'uploads';               // Folder in your repo
+    let ADMIN_TOKEN = "";
 
-    // Initialize list
-    window.onload = renderFiles;
+    function adminLogin() {
+        const pass = prompt("Enter Admin Access Token:");
+        if(pass) {
+            ADMIN_TOKEN = pass;
+            document.getElementById('adminPanel').style.display = 'block';
+            document.getElementById('badge').style.display = 'inline-block';
+            document.getElementById('loginBtn').innerText = "LOGOUT";
+        }
+    }
 
-    function handleFile(input) {
-        const file = input.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const fileData = {
-                id: Date.now(),
-                name: file.name,
-                type: file.type,
-                size: (file.size / 1024).toFixed(1) + ' KB',
-                content: e.target.result // Base64 string
-            };
+    async function loadFiles() {
+        const list = document.getElementById('fileList');
+        try {
+            const res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${FILE_PATH}`);
+            const files = await res.json();
             
-            storage.push(fileData);
-            save();
-            renderFiles();
+            list.innerHTML = "";
+            if(!Array.isArray(files)) { list.innerHTML = "<p>No files shared yet.</p>"; return; }
+
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = `
+                    <div>
+                        <div style="font-weight:bold;">${file.name}</div>
+                        <small style="color:#8b949e">${(file.size / 1024).toFixed(1)} KB</small>
+                    </div>
+                    <div style="display:flex; gap:10px;">
+                        <a href="${file.download_url}" class="btn" download>DOWNLOAD</a>
+                        ${ADMIN_TOKEN ? `<button class="btn btn-del" onclick="deleteFile('${file.path}', '${file.sha}')">DELETE</button>` : ''}
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        } catch (e) {
+            list.innerHTML = "<p>Error loading cloud storage.</p>";
+        }
+    }
+
+    async function uploadToGithub() {
+        const picker = document.getElementById('filePicker');
+        if(!picker.files[0]) return alert("Select a file first");
+        
+        const file = picker.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = async function() {
+            const content = reader.result.split(',')[1]; // Base64 part
+            const endpoint = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${FILE_PATH}/${file.name}`;
+            
+            const res = await fetch(endpoint, {
+                method: 'PUT',
+                headers: { 'Authorization': `token ${ADMIN_TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: `Admin upload: ${file.name}`,
+                    content: content
+                })
+            });
+
+            if(res.ok) { alert("Upload Successful!"); loadFiles(); }
+            else { alert("Upload Failed. Check Token."); }
         };
         reader.readAsDataURL(file);
     }
 
-    function renderFiles() {
-        const list = document.getElementById('fileList');
-        list.innerHTML = storage.length === 0 ? '<p style="color:#444">Storage Empty...</p>' : '';
-        
-        storage.forEach(file => {
-            const card = document.createElement('div');
-            card.className = 'file-card';
-            const icon = file.type.includes('image') ? '🖼️' : '📄';
-            
-            card.innerHTML = `
-                <div class="file-icon">${icon}</div>
-                <div class="file-name" title="${file.name}">${file.name}</div>
-                <div style="font-size:10px; color:#666; margin-bottom:10px;">${file.size}</div>
-                <div class="admin-actions">
-                    <button class="action-btn" onclick="downloadFile(${file.id})">DOWNLOAD</button>
-                    <button class="action-btn" style="color:#ff6b6b" onclick="deleteFile(${file.id})">DELETE</button>
-                </div>
-            `;
-            list.appendChild(card);
+    async function deleteFile(path, sha) {
+        if(!confirm("Permanently delete from cloud?")) return;
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${path}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `token ${ADMIN_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: "Admin delete", sha: sha })
         });
+        if(res.ok) loadFiles();
     }
 
-    function downloadFile(id) {
-        const file = storage.find(f => f.id === id);
-        const link = document.createElement('a');
-        link.href = file.content;
-        link.download = file.name;
-        link.click();
-    }
-
-    function deleteFile(id) {
-        storage = storage.filter(f => f.id !== id);
-        save();
-        renderFiles();
-    }
-
-    function clearStorage() {
-        if(confirm("Wipe all admin storage?")) {
-            storage = [];
-            save();
-            renderFiles();
-        }
-    }
-
-    function save() {
-        localStorage.setItem('admin_files', JSON.stringify(storage));
-    }
+    loadFiles();
 </script>
 
 </body>
